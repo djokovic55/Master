@@ -13,14 +13,11 @@ int main (int argc , char * argv [])
     
     int vec_size = atoi(argv[1]);
     
-    vector<int> vec1;
-    vector<int> vec2;
-    
-    
-    int* p1;
-	int* p2;
+    int* vec1 = new int[vec_size];
+    int* vec2 = new int[vec_size];
     
 
+    cout<<"******start******"<<endl;
     MPI_Init (&argc , &argv);
     MPI_Comm_size (MPI_COMM_WORLD, &csize);
     MPI_Comm_rank(MPI_COMM_WORLD, &prank);
@@ -29,40 +26,67 @@ int main (int argc , char * argv [])
     
     if(prank == 0)
     {
+
+		int sum_seq = 0;
+		int res = 0;
+
+		
 		for(int i = 0; i < vec_size; i++)
 		{
-			vec1.push_back(rand() % 10);
-			vec2.push_back(rand() % 10);
-    	}
-    	p1 = vec1.data();
-		p2 = vec2.data();
+			vec1[i] = rand() % 10;
+			vec2[i] = rand() % 10;
+		}
+
+		for(int i = 0; i < vec_size; i++)
+		{
+			cout<<"Vec1 el "<<i<<"= "<<vec1[i]<<endl;
+
+			sum_seq = vec1[i] * vec2[i];      
+			res += sum_seq;
+		}
+
+		cout<<"######## Sum seq: "<<res<<endl;
+
+		for(int i = 0; i < vec_size; i++)
+		{
+			cout<<"Vec2 el "<<i<<"= "<<vec2[i]<<endl;
+		}
+
+	
 	}
 	
+	MPI_Bcast(vec1, vec_size, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Bcast(vec2, vec_size, MPI_INT, 0, MPI_COMM_WORLD);
 	
-	MPI_Bcast(p1, vec_size, MPI_INT, 0, MPI_COMM_WORLD);
-	MPI_Bcast(p2, vec_size, MPI_INT, 0, MPI_COMM_WORLD);
-
-
 	int step = vec_size / csize;
+	int rest = vec_size % csize;
 
     if(vec_size % csize != 0)
     {
-    	if(prank < vec_size % csize)
-    		step += 1;
+		
+	//	if(prank < rest)
+			step += 1;
     }
-    //cout<<"step: "<<step<<endl;
-    
+    cout<<"step: "<<step<<endl;
+	
+    // define block
     int start = prank * step;
     int border = start + step;
     
-    int sum;
-    //cout<<"start: "<<start<< " " << border << " from process: "<<prank<<endl;
-    while (start < border && start  < vec_size)
+    int sum = 0;
+    cout<<"start: "<<start<< " " << border << " from process: "<<prank<<endl;
+
+	int small_sum = 0;
+	while (start < border && start  < vec_size)
     {
     	
-        //sum = vec1.at(start) * vec2.at(start);      
+        small_sum = vec1[start] * vec2[start];      
+		sum += small_sum;
+
         start += 1;
     }
+
+    cout<<"****************partial sum from p"<<prank<<"= "<<sum<<endl;
 
     // MPI_Barrier ( MPI_COMM_WORLD );
    
