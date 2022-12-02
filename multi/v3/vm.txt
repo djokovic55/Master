@@ -1,0 +1,6 @@
+Ako matrica ima 25 elemenata podeljenih na 4 procesa, svaki proces ce dobiti 6 elementa pri cemu ostaje ostatak 1.
+Potrebno je prosiriti matricu sa jos 3 elementa odnosno broj procesa - ostatak.
+Problem je broj elemenata u vektoru ostaje i dalje 5.
+
+
+https://cvw.cac.cornell.edu/mpicc/exercise

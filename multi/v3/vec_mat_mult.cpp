@@ -54,26 +54,46 @@ int main ( int argc , char * argv [])
     if (prank == 0)
         dim = returnSize(vfname);
 
-    MPI_Bcast (& dim , 1, MPI_INT , 0, MPI_COMM_WORLD );
+    MPI_Bcast(&dim , 1, MPI_INT , 0, MPI_COMM_WORLD);
 
     if ( prank == 0)
         vec = loadVec ( vfname , dim );
     else
         vec = new double [ dim ];
 
-    MPI_Bcast ( vec , dim , MPI_DOUBLE , 0, MPI_COMM_WORLD );
+    MPI_Bcast (vec , dim , MPI_DOUBLE , 0, MPI_COMM_WORLD);
 
-    if ( prank == 0)
+    if(prank == 0)
         tmat = loadMat(mfname ,dim);
-        int msize = dim * dim / csize;
-        mat = new double [ msize ];
 
-        MPI_Scatter ( tmat , msize , MPI_DOUBLE ,
-        mat , msize , MPI_DOUBLE ,
-        0, MPI_COMM_WORLD );
-        int to = dim / csize;
-        lres = new double [to];
+    int msize = dim * dim / csize;
 
+    mat = new double [ msize ];
+
+    for(int i = 0; i < msize; i++)
+        mat[i] = 0;
+
+    MPI_Scatter(tmat, msize , MPI_DOUBLE ,
+    mat , msize , MPI_DOUBLE ,
+    0, MPI_COMM_WORLD );
+
+    int to = dim / csize;
+    lres = new double [to];
+    // cik cak uzimanje redova
+    int row = prank;
+
+    while(row <= dim)
+    {
+        double s = 0;
+        
+        for (int j = 0; j != dim ; ++ j)
+            s += mat[row * dim + j] * vec[j];
+
+        lres[row] = s;
+
+        row += csize;
+
+    }
     for (int i = 0; i != to ; ++ i)
     {
         double s = 0;
@@ -82,6 +102,7 @@ int main ( int argc , char * argv [])
             s += mat [i * dim +j] * vec[j];
         lres[i] = s;
     }
+
     if( prank == 0)
         res = new double [ dim ];
 

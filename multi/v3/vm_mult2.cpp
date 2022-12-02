@@ -55,7 +55,7 @@ int main ( int argc , char * argv [])
     if (prank == 0)
         dim = returnSize(vfname);
 
-    MPI_Bcast (& dim , 1, MPI_INT , 0, MPI_COMM_WORLD );
+    MPI_Bcast (&dim , 1, MPI_INT , 0, MPI_COMM_WORLD );
 
     if ( prank == 0)
         vec = loadVec ( vfname , dim );
