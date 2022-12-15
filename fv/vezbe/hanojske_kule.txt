@@ -1,0 +1,11 @@
+Interfejs modula je:
+
+module hanoi    #(parameter S = 4)
+    (
+     input clk,
+     input rst,
+     input [1:0] fr,
+
+     input [1:0] to);
+...
+endmodule

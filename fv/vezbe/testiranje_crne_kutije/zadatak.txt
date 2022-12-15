@@ -1,0 +1,10 @@
+1. Everytime when y0 is 1, next cycle y0 is 0.
+2. y2 will become 1 again and again.
+3. When y1 is 1, from next cycle, y3 is 1 until y4 is 1.
+4. When y2 is followd by y5, then next cycle y6 will be 1.
+5. When y2 is deasserted for 3 cycles y7, has to be asserted same cycle.
+6. Next cycle after 2 or 3 repetition of y8, y9 has to be 0, and cycle after that y10 has to be 1.
+7. If y0 is 1 then next cycle y1 is 1, else y11 must be asserted.
+8. Just right 2nd non-consecutive repetition of y2 next cycle y16 will be asserted.
+9. Next cycle of 3rd non-consecutive repetition of all ones on y28-y17, y15 will be asserted.
+10. It will happen that y29 is asserted 10 consecutive cycles.
