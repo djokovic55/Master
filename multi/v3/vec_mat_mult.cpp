@@ -22,7 +22,7 @@ double* loadVec(char* fname ,int n)
 double* loadMat ( char * fname , int n)
 {
     FILE* f = fopen ( fname , "r" );
-    double* res = new double [ n*n ];
+    double* res = new double [n*n];
     double* it = res;
     while(fscanf(f, "%lf" , it ++) != EOF);
     fclose(f);
@@ -54,9 +54,9 @@ int main ( int argc , char * argv [])
     if (prank == 0)
         dim = returnSize(vfname);
 
-    MPI_Bcast(&dim , 1, MPI_INT , 0, MPI_COMM_WORLD);
+    MPI_Bcast(&dim , 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    if ( prank == 0)
+    if (prank == 0)
         vec = loadVec ( vfname , dim );
     else
         vec = new double [ dim ];
@@ -65,36 +65,36 @@ int main ( int argc , char * argv [])
 
     if(prank == 0)
         tmat = loadMat(mfname ,dim);
+    
+    MPI_Bcast (tmat , dim*dim , MPI_DOUBLE , 0, MPI_COMM_WORLD);
 
-    int msize = dim * dim / csize;
+    int row_count = dim / csize;
 
-    mat = new double [ msize ];
+    if(dim % csize != 0)
+        if(prank < dim % csize)
+            row_count++;
 
-    for(int i = 0; i < msize; i++)
-        mat[i] = 0;
+    mat = new double [dim*(1 + row_count)];
 
-    MPI_Scatter(tmat, msize , MPI_DOUBLE ,
-    mat , msize , MPI_DOUBLE ,
-    0, MPI_COMM_WORLD );
+    lres = new double [row_count];
 
-    int to = dim / csize;
-    lres = new double [to];
     // cik cak uzimanje redova
-    int row = prank;
+    // int row = prank;
 
-    while(row <= dim)
-    {
-        double s = 0;
+    // while(row <= dim)
+    // {
+    //     double s = 0;
         
-        for (int j = 0; j != dim ; ++ j)
-            s += mat[row * dim + j] * vec[j];
+    //     for (int j = 0; j != dim ; ++ j)
+    //         s += mat[row * dim + j] * vec[j];
 
-        lres[row] = s;
+    //     lres[row] = s;
 
-        row += csize;
+    //     row += csize;
 
-    }
-    for (int i = 0; i != to ; ++ i)
+    // }
+
+    for (int i = 0; i != row_count ; ++ i)
     {
         double s = 0;
         
@@ -103,17 +103,19 @@ int main ( int argc , char * argv [])
         lres[i] = s;
     }
 
-    if( prank == 0)
+    if(prank == 0)
         res = new double [ dim ];
 
-    MPI_Gather ( lres , to , MPI_DOUBLE ,
-    res , to , MPI_DOUBLE ,
-    0, MPI_COMM_WORLD );
+    MPI_Reduce (&lres , &res, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    if ( prank == 0) {
+    // MPI_Gather ( lres , row_count , MPI_DOUBLE ,
+    // res , row_count , MPI_DOUBLE ,
+    // 0, MPI_COMM_WORLD );
+
+    if (prank == 0) {
         logRes("res.txt" , res, dim);
     }
-    if ( prank == 0)
+    if (prank == 0)
     {
         delete [] tmat ;
         delete [] res ;
