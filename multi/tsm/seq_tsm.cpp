@@ -13,33 +13,25 @@ int tsp(int graph[][V], int s, int* best_path)
 
     vector<int> vertex;
     vector<int> permutations;
-    vector<vector<int>> permutations_2d;
 
     for (int i = 0; i < V; i++)
         if (i != s)
             vertex.push_back(i);
     int min_cost = MAX;
-	//
-	// store all permutations in an array
-	//int count = 0;
-	//cout<<"Test: ";
-    //while(next_permutation(vertex.begin(), vertex.end()))
-    //{
-		
-        //for (int i = 0; i < vertex.size(); i++) {
-			//permutations_2d[count].push_back(vertex[i]);
-		//}
-		//count++;
-    //}
+
+    while(next_permutation(vertex.begin(), vertex.end()))
+    {
+        for (int i = 0; i < vertex.size(); i++) {
+			permutations.push_back(vertex[i]);
+	}
+    }
 	
-	//cout<<"Number of permutations: " <<count<<endl;
 	
-	//cout<<"All permutations: ";
-	//for(int i = 0; i < permutations_2d.size(); i++)
-		//	for (int j = 0; j < permutations_2d[0].size(); j++) {
-			//		cout<<permutations_2d[i][j];
-			//}
-	//cout<<endl;
+	cout<<"All permutations: ";
+	for (int i = 0; i < permutations.size(); i++) {
+			cout<<permutations[i];
+	}
+	cout<<endl;
 
     cities[0] = s;
     cities[PATH - 1] = s;
