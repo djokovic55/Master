@@ -1,0 +1,11 @@
+0.7
+2020.2
+Nov 18 2020
+09:47:47
+C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/BRAM.vhd,1672075510,vhdl,,,,bram,,,,,,,,
+C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/fir_param.vhd,1672842358,vhdl,,,,fir_param,,,,,,,,
+C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/mac.vhd,1672073676,vhdl,C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/fir_param.vhd,,,mac,,,,,,,,
+C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/tb.vhd,1675256758,vhdl,,,,tb,,,,,,,,
+C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/top_structure.vhd,1672215218,vhdl,C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/tb.vhd,,,top_structure,,,,,,,,
+C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/txt_util.vhd,1671982780,vhdl,C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/tb.vhd,,,txt_util,,,,,,,,
+C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/util_pkg.vhd,1671982780,vhdl,C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/tb.vhd;C:/Users/L340/Desktop/DS otporni na greske/fir2_projekat/hdl/top_structure.vhd,,,util_pkg,,,,,,,,
