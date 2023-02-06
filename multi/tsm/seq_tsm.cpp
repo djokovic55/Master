@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <bits/stdc++.h>
 using namespace std;
@@ -8,53 +7,35 @@ using namespace std;
 
 int tsp(int graph[][V], int s, int* best_path)
 {
-    // save the city path
     int cities[PATH];
+    for (int i = 0; i < PATH; i++) cities[i] = -1;
 
     vector<int> vertex;
-    vector<int> permutations;
-
     for (int i = 0; i < V; i++)
         if (i != s)
             vertex.push_back(i);
     int min_cost = MAX;
 
-    while(next_permutation(vertex.begin(), vertex.end()))
-    {
-        for (int i = 0; i < vertex.size(); i++) {
-			permutations.push_back(vertex[i]);
-	}
-    }
-	
-	
-	cout<<"All permutations: ";
-	for (int i = 0; i < permutations.size(); i++) {
-			cout<<permutations[i];
-	}
-	cout<<endl;
-
-    cities[0] = s;
-    cities[PATH - 1] = s;
-
-    while(next_permutation(vertex.begin(), vertex.end()))
-     {
+    do {
         int current_cost = 0;
         int j = s;
-        
+        cities[0] = s;
         for (int i = 0; i < vertex.size(); i++) {
-                current_cost += graph[j][vertex[i]];
-                j = vertex[i];
-                cities[i+1] = vertex[i];
+            current_cost += graph[j][vertex[i]];
+            j = vertex[i];
+            cities[i+1] = vertex[i];
         }
         current_cost += graph[j][s];
-        if(current_cost < min_cost)
+        if(current_cost < min_cost) {
             for(int i = 0; i < PATH; i++)
                 best_path[i] = cities[i];
+            min_cost = current_cost;
+        }
+    } while (next_permutation(vertex.begin(), vertex.end()));
 
-        min_cost = min(min_cost, current_cost);
-	}
-	return min_cost;
+    return min_cost;
 }
+
 int main()
 {
     int best_path[PATH];
@@ -72,7 +53,5 @@ int main()
         cout<< best_path[i]<<" ";
     cout<<endl;
 
-
     return 0;
 }
-
