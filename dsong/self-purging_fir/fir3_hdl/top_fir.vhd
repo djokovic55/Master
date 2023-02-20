@@ -76,6 +76,8 @@ architecture Behavioral of top_fir is
     generic(red_units: natural := 5;
             input_data_width: natural := 24);
     Port ( 
+           clk : in std_logic;
+           reset : in std_logic;
            module_switch_bits_i : in STD_LOGIC_VECTOR (input_data_width*red_units-1 downto 0);
            major_bit_o : out std_logic_vector(input_data_width-1 downto 0));
     end component majority_voting;
@@ -128,10 +130,14 @@ begin
                             );
 
     end generate;
+    -- made it sync
     generate_voter : majority_voting generic map(red_units => red_units,
                                                  input_data_width => input_data_width
                                      )
-                                     port map(module_switch_bits_i => switch_output_data,
+                                     port map(
+                                              clk => clk,
+                                              reset =>reset,
+                                              module_switch_bits_i => switch_output_data,
                                               major_bit_o => vot_compare_data 
                                      );
     -- form output data

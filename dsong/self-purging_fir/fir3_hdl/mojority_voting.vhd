@@ -36,6 +36,8 @@ entity majority_voting is
     generic(red_units: natural := 5;
             input_data_width: natural := 24);
     Port ( 
+           clk : in std_logic;
+           reset : in std_logic;
            module_switch_bits_i : in STD_LOGIC_VECTOR (input_data_width*red_units-1 downto 0);
            major_bit_o : out std_logic_vector(input_data_width-1 downto 0));
 end majority_voting;
@@ -45,30 +47,68 @@ architecture Behavioral of majority_voting is
     type counter_array is array (0 to input_data_width-1) of std_logic_vector(log2c(red_units)-1 downto 0);
     signal big_counter : counter_array;
 
+    signal big_counter_next : counter_array;
+    signal big_counter_reg : counter_array;
 begin
 
+    -- voter_gen:for i in 0 to input_data_width-1 generate
+    -- -- signal counter : std_logic_vector(log2c(red_units)-1 downto 0);
+    -- begin
+    --     process(module_switch_bits_i)
+    --     begin
+    --         -- counter <= std_logic_vector(to_unsigned(0, log2c(red_units)-1)) & module_switch_bits_i(i*input_data_width);
+
+    --         for k in 0 to red_units-1 loop
+    --             -- critical bug, i needs to be added in order to target each set of voter bits correctly
+    --             -- if(k = 0) then
+
+    --                 -- counter <= std_logic_vector(to_unsigned(0, log2c(red_units)-1)) & module_switch_bits_i(k*input_data_width + i);
+    --             -- else
+    --                 if module_switch_bits_i(k*input_data_width + i) = '1' then
+    --                     big_counter(i) <= std_logic_vector(unsigned(big_counter(i)) + to_unsigned(1, log2c(red_units)));
+    --                     else 
+    --                     big_counter(i) <= big_counter(i);
+    --                 end if;
+    --             -- end if;
+    --         end loop;
+
+    --         if(unsigned(big_counter(i)) >= (red_units+1)/2) then
+    --             major_bit_o(i) <= '1';
+    --         else    
+    --             major_bit_o(i) <= '0';
+    --         end if;
+    --     end process;
+
+    -- end generate;
+
     voter_gen:for i in 0 to input_data_width-1 generate
-    -- signal counter : std_logic_vector(log2c(red_units)-1 downto 0);
     begin
-        process(module_switch_bits_i, big_counter(i))
+
+        process(clk)
         begin
-            -- counter <= std_logic_vector(to_unsigned(0, log2c(red_units)-1)) & module_switch_bits_i(i*input_data_width);
+            if(clk'event and clk = '1') then
+                if(reset = '1') then
+                    big_counter_reg(i) <= (others => '0');
+                else
+                    big_counter_reg(i) <= big_counter_next(i);
+                end if;
+            end if;
+        end process;
+
+        process(module_switch_bits_i, big_counter_next, big_counter_reg)
+        begin
 
             for k in 0 to red_units-1 loop
-                -- critical bug, i needs to be added in order to target each set of voter bits correctly
-                -- if(k = 0) then
 
-                    -- counter <= std_logic_vector(to_unsigned(0, log2c(red_units)-1)) & module_switch_bits_i(k*input_data_width + i);
-                -- else
-                    if module_switch_bits_i(k*input_data_width + i) = '1' then
-                        big_counter(i) <= std_logic_vector(unsigned(big_counter(i)) + to_unsigned(1, log2c(red_units)));
-                        else 
-                        big_counter(i) <= big_counter(i);
-                    end if;
-                -- end if;
+                if module_switch_bits_i(k*input_data_width + i) = '1' then
+                    big_counter_next(i) <= std_logic_vector(unsigned(big_counter_reg(i)) + to_unsigned(1, log2c(red_units)));
+                    else 
+                    big_counter_next(i) <= big_counter_reg(i);
+                end if;
+
             end loop;
 
-            if(unsigned(big_counter(i)) >= (red_units+1)/2) then
+            if(unsigned(big_counter_reg(i)) >= (red_units+1)/2) then
                 major_bit_o(i) <= '1';
             else    
                 major_bit_o(i) <= '0';
