@@ -62,7 +62,7 @@ begin
               => pi_column_length_south,
              max_o => ns_max);
 
-    passive_mode_check <= pi_error_detected and not(pi_active_mode);
+    passive_mode_check <= pi_error_detected or not(pi_active_mode);
 
     -- Address and state registers
     STATE_TRANS_PROC:process(pi_clk)
@@ -106,7 +106,11 @@ begin
             if(passive_mode_check = '1') then 
                 state_nxt <= PASSIVE;
             else
-                state_nxt <= GREEN_NS_COUNT;
+                if(unsigned(ns_nxt) >= 1) then
+                    state_nxt <= GREEN_NS_COUNT;
+                else 
+                    state_nxt <= RED_YELLOW;
+                end if;
             end if;
 
         when GREEN_NS_COUNT =>
@@ -117,7 +121,7 @@ begin
                     state_nxt <= PASSIVE;
                 else
                     ns_nxt <= std_logic_vector(unsigned(ns_r) - 1);
-                    if(unsigned(ns_nxt) - 1 = to_unsigned(0, 8)) then
+                    if(unsigned(ns_nxt) = to_unsigned(0, 8)) then
                         state_nxt <= RED_YELLOW;
                     else
                         state_nxt <= GREEN_NS_COUNT;
@@ -136,7 +140,11 @@ begin
             if(passive_mode_check = '1') then 
                 state_nxt <= PASSIVE;
             else
-                state_nxt <= GREEN_EW_COUNT;
+                if(unsigned(ew_nxt) >= 1) then
+                    state_nxt <= GREEN_EW_COUNT;
+                else 
+                    state_nxt <= GREEN_YELLOW;
+                end if;
             end if;
         when GREEN_EW_COUNT =>
             if(pi_error_detected = '1') then 
@@ -146,7 +154,7 @@ begin
                     state_nxt <= PASSIVE;
                 else
                     ew_nxt <= std_logic_vector(unsigned(ew_r) - 1);
-                    if(unsigned(ns_nxt) - 1 = to_unsigned(0, 8)) then
+                    if(unsigned(ew_nxt) = to_unsigned(0, 8)) then
                         state_nxt <= GREEN_YELLOW;
                     else
                         state_nxt <= GREEN_EW_COUNT;
@@ -183,6 +191,7 @@ begin
 
             if(passive_mode_check = '1') then 
             else
+                
                 po_semaphore_ctrl_north <= GREEN;
                 po_semaphore_ctrl_south <= GREEN;
             end if;

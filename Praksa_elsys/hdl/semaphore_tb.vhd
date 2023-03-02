@@ -26,29 +26,29 @@ architecture Behavioral of tb is
 
     constant period : time := 20 ns;
 
-    component semaphore is
-    port (
-        pi_clk : in std_logic;
-        pi_rst_n : in std_logic;
+    -- component semaphore is
+    -- port (
+    --     pi_clk : in std_logic;
+    --     pi_rst_n : in std_logic;
 
-        pi_column_length_east : in std_logic_vector(7 downto 0);
-        pi_column_length_west : in std_logic_vector(7 downto 0);
-        pi_column_length_north : in std_logic_vector(7 downto 0);
-        pi_column_length_south : in std_logic_vector(7 downto 0);
+    --     pi_column_length_east : in std_logic_vector(7 downto 0);
+    --     pi_column_length_west : in std_logic_vector(7 downto 0);
+    --     pi_column_length_north : in std_logic_vector(7 downto 0);
+    --     pi_column_length_south : in std_logic_vector(7 downto 0);
 
-        pi_active_mode : in std_logic;
-        pi_error_detected : in std_logic;
+    --     pi_active_mode : in std_logic;
+    --     pi_error_detected : in std_logic;
 
-        po_semaphore_ctrl_east : out std_logic_vector(2 downto 0);
-        po_semaphore_ctrl_west : out std_logic_vector(2 downto 0);
-        po_semaphore_ctrl_north : out std_logic_vector(2 downto 0);
-        po_semaphore_ctrl_south : out std_logic_vector(2 downto 0)
-    );
-    end component;
+    --     po_semaphore_ctrl_east : out std_logic_vector(2 downto 0);
+    --     po_semaphore_ctrl_west : out std_logic_vector(2 downto 0);
+    --     po_semaphore_ctrl_north : out std_logic_vector(2 downto 0);
+    --     po_semaphore_ctrl_south : out std_logic_vector(2 downto 0)
+    -- );
+    -- end component;
 
     begin
 
-        dut: semaphore
+        dut: entity work.semaphore(behavioral)
         port map(pi_clk => pi_clk,
                  pi_rst_n => pi_rst_n,
                  pi_column_length_east => pi_column_length_east,
@@ -82,14 +82,22 @@ architecture Behavioral of tb is
         pi_active_mode <= '1';
         pi_error_detected <= '0';
 
-        pi_column_length_east <= std_logic_vector(to_unsigned(15, 8));
-        pi_column_length_west <= std_logic_vector(to_unsigned(65, 8));
-        pi_column_length_north <= std_logic_vector(to_unsigned(35, 8));
-        pi_column_length_south <= std_logic_vector(to_unsigned(25, 8));
+        pi_column_length_east <= std_logic_vector(to_unsigned(1, 8));
+        pi_column_length_west <= std_logic_vector(to_unsigned(1, 8));
+        pi_column_length_north <= std_logic_vector(to_unsigned(0, 8));
+        pi_column_length_south <= std_logic_vector(to_unsigned(0, 8));
         wait until falling_edge(pi_clk);
         
+        wait for 1000 ns;
 
+        pi_error_detected <= '1';
+        wait until falling_edge(pi_clk);
+        wait until falling_edge(pi_clk);
+        
+        
+
+        wait;
     end process;
 
 
-                 end architecture Behavioral;
+end architecture Behavioral;
