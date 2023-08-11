@@ -8,31 +8,9 @@ using namespace std;
 #define MAX 1000000
 // #define MIN(a,b) ((a<b)?a:b)
 
-int tsp(int graph[][V], int s)
-{
-    int cities[PATH];
-    int vertex[V];
-    int min_cost = MAX;
-    int current_cost = 0;
-    int j = s;
-    
-    for (int i = 0; i < V-1; i++) {
-        current_cost += graph[j][vertex[i]];
-        j = vertex[i];
-        cities[i+1] = vertex[i];
-    }
-    current_cost += graph[j][s];
-    if(current_cost < min_cost)
-        min_cost = current_cost;
-    current_cost = 0;
-    j = s;
-
-    return min_cost;
-}
-
 int main(int argc, char *argv[])
 {
-    int rank, size, best_path[PATH];
+    int rank, size;
     int graph[][V] = { {MAX, 5, 4, 2, 9, 1, 5},
                        {MAX, MAX, 0, 6, 9, 6, 0},
                        { 5, 3, MAX, 7, 6, 3, 2},
@@ -47,14 +25,15 @@ int main(int argc, char *argv[])
 
     int chunkSize; 
     vector<int> allPerms;
-    int starting_city;
-    int perms_num;
+    int starting_city = 0;
+    int last_permutation_loc;
 
     
     if(rank == 0) {
         // Generate all permutations and distribute work to workers
         vector<int> vertex;
-        perms_num = 0;
+        int perms_num = 0;
+        cout <<"PASS1"<<endl;
 
         for (int i = 0; i < V; i++)
             if (i != starting_city)
@@ -65,34 +44,91 @@ int main(int argc, char *argv[])
             perms_num++;
         } while (next_permutation(vertex.begin(), vertex.end()));
 
+        last_permutation_loc = (perms_num - 1) * V;
+        cout <<"PASS2"<<endl;
+
         // chunkSize = allPerms.size() / size;
         MPI_Bcast(&allPerms, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&perms_num, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&last_permutation_loc, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        cout <<"PASS3"<<endl;
 
-
-
-
-        // for (int i = 1; i < size; ++i) {
-        // MPI_Send(&allPerms[(i - 1) * chunkSize], chunkSize, MPI_INT, i, 0, MPI_COMM_WORLD);
-        // }
-        // arr = vector<int>(allPerms.begin() + (size - 1) * chunkSize, allPerms.end());
     } 
-        // Receive work from master and generate permutations
-        // MPI_Recv(arr.data(), totalElements, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
     MPI_Barrier(MPI_COMM_WORLD);
 
+    // this is the starting pos of permutation for each process
+    int i = rank*V;
+    int ds = size;
 
+    int cities[PATH];
 
+    int min_cost = MAX;
+    int global_min_cost;
 
+    int best_path[PATH];
+    int global_best_path[PATH];
 
-    // int s = 6;
-    // int local_min = tsp(graph, s);
-    // int global_min;
-    // MPI_Reduce(&local_min, &global_min, 1, MPI_INT, MPI_MIN, 0, MPI_COMM_WORLD);
+    while(i <= last_permutation_loc){
 
-    // if (rank == 0) {
-    //     cout<<"Min cost: "<<global_min<<endl;
-    // }
+        int vertex[V];
+
+        int current_cost = 0;
+
+        int j = starting_city;
+        if(rank == 0)
+            cout<<"All perms size: "<<allPerms.size()<<endl;
+
+        if(rank == 0)
+            cout<<"PASS4"<<endl;
+        
+        for (int k = 0; i < V; k++) {
+            current_cost += graph[j][allPerms[i+k]];
+            j = allPerms[i+k];
+            cities[k+1] = allPerms[i+k];
+        }
+        //Return to origin city
+        current_cost += graph[j][starting_city];
+        if(rank == 0)
+            cout<<"PASS5"<<endl;
+
+        if(current_cost < min_cost) {
+            for(int t = 0; t < PATH; t++)
+                best_path[t] = cities[t];
+
+            min_cost = current_cost;
+        }
+
+        // next permutation starting location
+        i += (i+ds)*V;
+    }
+    if(rank =! 0) {
+        MPI_Send(&min_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(&best_path, PATH, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    } else {
+        cout <<"PASS6"<<endl;
+        int small_global_min_cost = MAX;
+        int small_global_best_path[PATH];
+
+        for(int q = 1; q < size; q++){
+            MPI_Recv(&small_global_min_cost, 1, MPI_INT, q, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&small_global_best_path, PATH, MPI_INT, q, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            if(small_global_min_cost < global_min_cost) {
+                for(int t = 0; t < PATH; t++)
+                    global_best_path[t] = small_global_best_path[t];
+
+                global_min_cost = small_global_min_cost;
+            }
+        }
+
+        // Print result
+        cout <<"Max cost: " <<global_min_cost<< endl;
+        cout <<"Visited cities: ";
+        for(int i = 0; i < PATH; i++)
+            cout<< global_best_path[i]<<" ";
+        cout<<endl;
+
+    }
 
     MPI_Finalize();
     return 0;
