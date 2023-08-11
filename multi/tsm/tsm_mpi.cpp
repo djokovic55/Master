@@ -1,6 +1,7 @@
 
 #include <bits/stdc++.h>
 #include <mpi.h>
+#include <stdio.h>
 using namespace std;
 
 #define V 7
@@ -19,15 +20,14 @@ int main(int argc, char *argv[])
                        { 9, 1, 8, 0, 9, MAX, 2},
                        { 1, 8, 4, 8, 6, 0, MAX}};
 
-    MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    int chunkSize; 
     vector<int> allPerms;
+    int* allPerms_p;
     int starting_city = 0;
     int last_permutation_loc;
 
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     
     if(rank == 0) {
         // Generate all permutations and distribute work to workers
@@ -35,29 +35,53 @@ int main(int argc, char *argv[])
         int perms_num = 0;
         cout <<"PASS1"<<endl;
 
-        for (int i = 0; i < V; i++)
+        for (int i = 0; i < int(V); i++){
             if (i != starting_city)
                 vertex.push_back(i);
+        }
 
-        do {
-            allPerms.insert(allPerms.end(), vertex.begin(), vertex.end());
-            perms_num++;
-        } while (next_permutation(vertex.begin(), vertex.end()));
 
-        last_permutation_loc = (perms_num - 1) * V;
-        cout <<"PASS2"<<endl;
+            do {
+                allPerms.insert(allPerms.end(), vertex.begin(), vertex.end());
+                perms_num++;
+            } while (next_permutation(vertex.begin(), vertex.end()));
 
-        // chunkSize = allPerms.size() / size;
-        MPI_Bcast(&allPerms, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&last_permutation_loc, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        cout <<"PASS3"<<endl;
+            last_permutation_loc = (perms_num - 1) * (V-1);
+            cout <<"Number of permutations : " <<perms_num<<endl;
+            cout <<"Number of elements : " <<allPerms.size()<<endl;
+            cout <<"PASS2"<<endl;
+
+            allPerms_p = allPerms.data();
+
+            int k = 0;
+            for(int i = 0; i < 4320; i++){
+                
+                cout<<"On process 0, allPerms_p el:"<<allPerms_p[i]<<endl;
+                k++;
+
+            }
+
+            cout <<"Num of elelments inside pointer = "<<k<<endl;
+
+            cout <<"PASS2.1"<<endl;
+            // MPI_Bcast(allPerms_p, perms_num*int(V), MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Bcast(allPerms_p, 4320, MPI_INT, 0, MPI_COMM_WORLD);
+            cout <<"PASS2.2"<<endl;
+            MPI_Bcast(&last_permutation_loc, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            cout <<"PASS3"<<endl;
 
     } 
 
     MPI_Barrier(MPI_COMM_WORLD);
+    
+    if(rank == 1) {
+        for(int i = 0; i < 4320; i++){
+            cout<<"On process 1, allPerms el:"<<allPerms_p[i]<<endl;
+        }
+    }
 
     // this is the starting pos of permutation for each process
-    int i = rank*V;
+    int i = rank*(V-1);
     int ds = size;
 
     int cities[PATH];
@@ -70,21 +94,24 @@ int main(int argc, char *argv[])
 
     while(i <= last_permutation_loc){
 
-        int vertex[V];
+        if(rank == 0)
+            cout<<"Value i = "<<i<<endl;
 
         int current_cost = 0;
 
         int j = starting_city;
-        if(rank == 0)
-            cout<<"All perms size: "<<allPerms.size()<<endl;
+        // if(rank == 0)
+        //     cout<<"All perms size: "<<allPerms.size()<<endl;
 
         if(rank == 0)
             cout<<"PASS4"<<endl;
         
-        for (int k = 0; i < V; k++) {
-            current_cost += graph[j][allPerms[i+k]];
-            j = allPerms[i+k];
-            cities[k+1] = allPerms[i+k];
+        for (int k = 0; i < V-1; k++) {
+            current_cost += graph[j][allPerms_p[i+k]];
+            j = allPerms_p[i+k];
+            cities[k+1] = allPerms_p[i+k];
+            if(rank == 0)
+                cout<<"PASS04."<<k<<endl;
         }
         //Return to origin city
         current_cost += graph[j][starting_city];
@@ -99,8 +126,9 @@ int main(int argc, char *argv[])
         }
 
         // next permutation starting location
-        i += (i+ds)*V;
+        i += ds* int(V-1);
     }
+
     if(rank =! 0) {
         MPI_Send(&min_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         MPI_Send(&best_path, PATH, MPI_INT, 0, 0, MPI_COMM_WORLD);
