@@ -21,7 +21,13 @@ int main(int argc, char *argv[])
                        { 1, 8, 4, 8, 6, 0, MAX}};
 
     vector<int> allPerms;
-    int* allPerms_p;
+    // defaults
+    // for(int i = 0; i < 10; i++)
+    //     allPerms.push_back(i);
+
+    int allPerms_size = 0;
+    int perms_num = 0;
+    // int* allPerms_p;
     int starting_city = 0;
     int last_permutation_loc;
 
@@ -32,53 +38,46 @@ int main(int argc, char *argv[])
     if(rank == 0) {
         // Generate all permutations and distribute work to workers
         vector<int> vertex;
-        int perms_num = 0;
-        cout <<"PASS1"<<endl;
+        cout <<"PASS1, proc0"<<endl;
 
+        //form basic city vector
         for (int i = 0; i < int(V); i++){
             if (i != starting_city)
                 vertex.push_back(i);
         }
 
+        // GENERATE ALL PERMUTATIONS - Broadcast
+        do {
+            allPerms.insert(allPerms.end(), vertex.begin(), vertex.end());
+            perms_num++;
+        } while (next_permutation(vertex.begin(), vertex.end()));
 
-            do {
-                allPerms.insert(allPerms.end(), vertex.begin(), vertex.end());
-                perms_num++;
-            } while (next_permutation(vertex.begin(), vertex.end()));
+        // POSITION OF THE LAST PERMUTATIONS - Broadcast
+        last_permutation_loc = (perms_num - 1) * (V-1);
 
-            last_permutation_loc = (perms_num - 1) * (V-1);
-            cout <<"Number of permutations : " <<perms_num<<endl;
-            cout <<"Number of elements : " <<allPerms.size()<<endl;
-            cout <<"PASS2"<<endl;
+        // ALL PERMUTATIONS SIZE - Broadcast
+        allPerms_size = allPerms.size();
+        cout <<"All perms in proc0 size "<<allPerms.size()<<"Perms number "<<perms_num<<endl;
 
-            allPerms_p = allPerms.data();
-
-            int k = 0;
-            for(int i = 0; i < 4320; i++){
-                
-                cout<<"On process 0, allPerms_p el:"<<allPerms_p[i]<<endl;
-                k++;
-
-            }
-
-            cout <<"Num of elelments inside pointer = "<<k<<endl;
-
-            cout <<"PASS2.1"<<endl;
-            // MPI_Bcast(allPerms_p, perms_num*int(V), MPI_INT, 0, MPI_COMM_WORLD);
-            MPI_Bcast(allPerms_p, 4320, MPI_INT, 0, MPI_COMM_WORLD);
-            cout <<"PASS2.2"<<endl;
-            MPI_Bcast(&last_permutation_loc, 1, MPI_INT, 0, MPI_COMM_WORLD);
-            cout <<"PASS3"<<endl;
 
     } 
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Bcast(&allPerms_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    allPerms.resize(allPerms_size);
+    // cout <<"Bcast1"<<endl;
+
+    MPI_Bcast(allPerms.data(), allPerms_size, MPI_INT, 0, MPI_COMM_WORLD);
+    // cout <<"Bcast2"<<endl;
+
+    MPI_Bcast(&last_permutation_loc, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    // cout <<"Bcast3"<<endl;
+
     
-    if(rank == 1) {
-        for(int i = 0; i < 4320; i++){
-            cout<<"On process 1, allPerms el:"<<allPerms_p[i]<<endl;
-        }
-    }
+    // if(rank == 1) {
+    //     for(int i = 0; i < 4320; i++){
+    //         cout<<"On process 1, allPerms el:"<<allPerms_p[i]<<endl;
+    //     }
+    // }
 
     // this is the starting pos of permutation for each process
     int i = rank*(V-1);
@@ -92,31 +91,29 @@ int main(int argc, char *argv[])
     int best_path[PATH];
     int global_best_path[PATH];
 
+
+    if(rank == 1) {
+        cout<<"Last permutation loc: "<<last_permutation_loc<<". Proc " <<rank<<endl;
+        cout<<"All perms size"<< allPerms.size()<<". Proc "<<rank<<endl;
+
+    }
+
     while(i <= last_permutation_loc){
 
-        if(rank == 0)
-            cout<<"Value i = "<<i<<endl;
-
         int current_cost = 0;
+        // if(rank == 1) {
+        //     cout<<"Current permutation start location "<<i<<". Proc " <<rank<<endl;
+        // }
 
         int j = starting_city;
-        // if(rank == 0)
-        //     cout<<"All perms size: "<<allPerms.size()<<endl;
-
-        if(rank == 0)
-            cout<<"PASS4"<<endl;
         
-        for (int k = 0; i < V-1; k++) {
-            current_cost += graph[j][allPerms_p[i+k]];
-            j = allPerms_p[i+k];
-            cities[k+1] = allPerms_p[i+k];
-            if(rank == 0)
-                cout<<"PASS04."<<k<<endl;
+        for (int k = 0; k < V-1; k++) {
+            current_cost += graph[j][allPerms[i+k]];
+            j = allPerms[i+k];
+            cities[k+1] = allPerms[i+k];
         }
         //Return to origin city
         current_cost += graph[j][starting_city];
-        if(rank == 0)
-            cout<<"PASS5"<<endl;
 
         if(current_cost < min_cost) {
             for(int t = 0; t < PATH; t++)
@@ -125,15 +122,27 @@ int main(int argc, char *argv[])
             min_cost = current_cost;
         }
 
+
+        // for 2 proc and 7 cities proc0 should take permutations on position 0 14 28, while proc1 takes 7 21 42 etc
         // next permutation starting location
         i += ds* int(V-1);
     }
 
+    // MPI_Barrier(MPI_COMM_WORLD);
+    if(rank != 0){
+        cout <<"Proc "<<rank<<" before if, "<<size<<endl;
+
+    }
+    
+
     if(rank =! 0) {
+        cout <<"Proc "<<rank<<" sends, "<<size<<endl;
         MPI_Send(&min_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         MPI_Send(&best_path, PATH, MPI_INT, 0, 0, MPI_COMM_WORLD);
+
     } else {
-        cout <<"PASS6"<<endl;
+        cout <<"Proc "<<rank<<" receives"<<endl;
+
         int small_global_min_cost = MAX;
         int small_global_best_path[PATH];
 
@@ -147,6 +156,7 @@ int main(int argc, char *argv[])
 
                 global_min_cost = small_global_min_cost;
             }
+
         }
 
         // Print result
