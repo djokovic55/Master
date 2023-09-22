@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cmath>
 #include <vector>
+#include <mpi.h>
 
 using namespace std;
 
@@ -97,109 +98,151 @@ void simulateBallMotion(Ball& ball, double timeStep, double friction) {
 
 
 int main() {
-    FILE* inputFile = fopen("balls.txt", "r"); // Open the input file in read mode
-    FILE* outputFile = fopen("simulation.txt", "w"); // Open the output file in write mode
-
+    
+    int rank;
+    int size;
+    int numTimeSteps = 100;
     const double timeStep = 0.01; // Time step for simulation
-    const double friction = 0.001; // Friction factor
     int numBalls = 0; // Number of balls
-    // const double ballRadius = 0.5;
 
-    // Create holes
-    Hole leftUpperHole(0.0, 0.0, 0.5);
-    Hole rightUpperHole(50.0, 0.0, 0.5);
-    Hole middleUpperHole(25.0, 0.0, 0.5);
-    Hole leftBottomHole(0.0, 20.0, 0.5);
-    Hole rightBottomHole(50.0, 20.0, 0.5);
-    Hole middleBottomHole(25.0, 20.0, 0.5);
+    MPI_Init(NULL, NULL);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
 
-    if (!inputFile) {
-        std::cerr << "Error opening input file." << std::endl;
-        return 1;
-    }
+    if(rank == 0){
+        FILE* inputFile = fopen("balls.txt", "r"); // Open the input file in read mode
+
+        const double friction = 0.001; // Friction factor
+        // const double ballRadius = 0.5;
+
+        // Create holes
+        Hole leftUpperHole(0.0, 0.0, 0.5);
+        Hole rightUpperHole(50.0, 0.0, 0.5);
+        Hole middleUpperHole(25.0, 0.0, 0.5);
+        Hole leftBottomHole(0.0, 20.0, 0.5);
+        Hole rightBottomHole(50.0, 20.0, 0.5);
+        Hole middleBottomHole(25.0, 20.0, 0.5);
 
 
-    std::vector<Ball> balls; // Vector to store ball objects
+        if (!inputFile) {
+            std::cerr << "Error opening input file." << std::endl;
+            return 1;
+        }
 
-    double mass, radius, x, y, vx, vy;
 
-    while (fscanf(inputFile, "%lf %lf %lf %lf %lf %lf", &mass, &radius, &x, &y, &vx, &vy) == 6) {
-        Ball ball(mass, radius, x, y, vx, vy);
-        balls.push_back(ball);
-        numBalls++;
-    }
-    cout<<"Balls num "<< numBalls<<endl; 
+        std::vector<Ball> balls; // Vector to store ball objects
 
-    // Close the input file
-    fclose(inputFile);
+        double mass, radius, x, y, vx, vy;
 
-    if (!outputFile) {
-        std::cerr << "Error opening output file." << std::endl;
-        return 1;
-    }
+        while (fscanf(inputFile, "%lf %lf %lf %lf %lf %lf", &mass, &radius, &x, &y, &vx, &vy) == 6) {
+            Ball ball(mass, radius, x, y, vx, vy);
+            balls.push_back(ball);
+            numBalls++;
+        }
+        // cout<<"Balls num "<< numBalls<<endl; 
 
-    // Create balls
-    // std::vector<Ball> balls;
-    // balls.push_back(Ball(0.17, ballRadius, 10.0, 10.0, 20.0, 1.0)); // Cue Ball
-    // balls.push_back(Ball(0.17, ballRadius, 20.0, 10.0, 0.0, 0.0)); // Ball 1
-    // balls.push_back(Ball(0.17, ballRadius, 30.0, 10.0, 0.0, 0.0)); // Ball 2
-    // balls.push_back(Ball(0.17, ballRadius, 40.0, 10.0, 0.0, 0.0)); // Ball 3
-    // balls.push_back(Ball(0.17, ballRadius, 10.0, 15.0, 0.0, 0.0)); // Ball 4
+        MPI_Send(&numBalls, 1, MPI_INT, 1, 1, MPI_COMM_WORLD);
 
-    // Simulation loop
-    for (int i = 0; i < 100; ++i) { // Simulate for 10 seconds (adjust as needed)
-        // Iterate through all balls
-        for (int j = 0; j < numBalls; ++j) {
-            // Skip the cue ball
-            if(balls[j].in_the_hole) continue;
-            
-            // Simulate ball motion
-            simulateBallMotion(balls[j], timeStep, friction);
-            
-            // Check for ball-to-wall collisions
-            handleWallCollision(balls[j]);
-            
-            // Check for ball-to-ball collisions with other balls if it is on the table
-            for (int k = 0; k < numBalls; ++k) {
-                if (k != j && areBallsColliding(balls[j], balls[k])) {
-                    handleBallCollision(balls[j], balls[k]);
-                    cout<<"Ball "<<j<<" and ball "<<k<<" collided!"<<endl;
+        // Close the input file
+        fclose(inputFile);
+
+        // Simulation loop
+        for (int i = 0; i < numTimeSteps; ++i) { // Simulate for 10 seconds (adjust as needed)
+            // Iterate through all balls
+            for (int j = 0; j < numBalls; ++j) {
+                // Skip the cue ball
+                if(balls[j].in_the_hole) continue;
+                
+                // Simulate ball motion
+                simulateBallMotion(balls[j], timeStep, friction);
+                
+                // Check for ball-to-wall collisions
+                handleWallCollision(balls[j]);
+                
+                // Check for ball-to-ball collisions with other balls if it is on the table
+                for (int k = 0; k < numBalls; ++k) {
+                    if (k != j && areBallsColliding(balls[j], balls[k])) {
+                        handleBallCollision(balls[j], balls[k]);
+                        // cout<<"Ball "<<j<<" and ball "<<k<<" collided!"<<endl;
+                    }
+                }
+                
+                // Check if the ball has fallen into a hole
+                if (isBallInHole(balls[j], leftUpperHole) ||
+                    isBallInHole(balls[j], rightUpperHole) ||
+                    isBallInHole(balls[j], middleUpperHole) ||
+                    isBallInHole(balls[j], leftBottomHole) ||
+                    isBallInHole(balls[j], rightBottomHole) ||
+                    isBallInHole(balls[j], middleBottomHole)) {
+                    // Set the ball's position to (-1, -1) when it falls into a hole
+                    balls[j].x = -1.0;
+                    balls[j].y = -1.0;
+                    balls[j].vx = 0;
+                    balls[j].vy = 0;
+                    balls[j].in_the_hole = true;
                 }
             }
             
-            // Check if the ball has fallen into a hole
-            if (isBallInHole(balls[j], leftUpperHole) ||
-                isBallInHole(balls[j], rightUpperHole) ||
-                isBallInHole(balls[j], middleUpperHole) ||
-                isBallInHole(balls[j], leftBottomHole) ||
-                isBallInHole(balls[j], rightBottomHole) ||
-                isBallInHole(balls[j], middleBottomHole)) {
-                // Set the ball's position to (-1, -1) when it falls into a hole
-                balls[j].x = -1.0;
-                balls[j].y = -1.0;
-                balls[j].vx = 0;
-                balls[j].vy = 0;
-                balls[j].in_the_hole = true;
+            
+            // Print ball positions
+            // std::cout << "Time: " << i * timeStep << "s\n";
+            for (int j = 0; j < numBalls; ++j) {
+                // std::cout << "Ball " << j << ": (" << balls[j].x << ", " << balls[j].y << ")\n";
+                float cor_x = balls[j].x;
+                float cor_y = balls[j].y;
+
+                MPI_Send(&j, 1, MPI_INT, 1, 2, MPI_COMM_WORLD);
+                MPI_Send(&cor_x, 1, MPI_FLOAT, 1, 3, MPI_COMM_WORLD);
+                MPI_Send(&cor_y, 1, MPI_FLOAT, 1, 4, MPI_COMM_WORLD);
             }
+
+
         }
-        
-        
-        // Print ball positions
-        std::cout << "Time: " << i * timeStep << "s\n";
-        for (int j = 0; j < numBalls; ++j) {
-            std::cout << "Ball " << j << ": (" << balls[j].x << ", " << balls[j].y << ")\n";
+    } else if(rank == 1) {
+        FILE* outputFile = fopen("simulation.txt", "w"); // Open the output file in write mode
+        float cor_x = 0.0; 
+        float cor_y = 0.0;
+        int ball_num;
+
+        cout<<"Proc:"<<rank<<". Pass1"<<endl;
+
+        if (!outputFile) {
+            std::cerr << "Error opening output file." << std::endl;
+            MPI_Finalize();
+            return 1;
         }
 
-        // Print the same data to the output file
-        fprintf(outputFile, "Time: %.2lf s\n", i * timeStep);
-        for (int j = 0; j < numBalls; ++j) {
-            fprintf(outputFile, "Ball %d: (%.2lf, %.2lf)\n", j, balls[j].x, balls[j].y);
+        MPI_Recv(&numBalls, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        cout<<"Proc:"<<rank<<". Number of balls"<<numBalls<<endl;
+
+
+        for (int i = 0; i < numTimeSteps; ++i) { // Simulate for 10 seconds (adjust as needed)
+
+            fprintf(outputFile, "Time: %.2lf s\n", i * timeStep);
+            for (int j = 0; j < numBalls; ++j) {
+                MPI_Recv(&ball_num, 1, MPI_INT, 0, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(&cor_x, 1, MPI_FLOAT, 0, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(&cor_y, 1, MPI_FLOAT, 0, 4, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                
+                if(j == 0){
+                    cout<<"Proc:"<<rank<<". Number of balls"<<numBalls<<endl;
+                    cout<<"Proc:"<<rank<<". Cor x: "<<cor_x<<endl;
+                    cout<<"Proc:"<<rank<<". Cor y: "<<cor_y<<endl;
+                }
+                // Print the same data to the output file
+
+                fprintf(outputFile, "Ball %d: (%.2lf, %.2lf)\n", j, cor_x, cor_y);
+            }
+
         }
 
-    }
+
+        fclose(outputFile);
 
     // Close the output file
-    fclose(outputFile);
+    }
+
+    MPI_Finalize();
     return 0;
 }
