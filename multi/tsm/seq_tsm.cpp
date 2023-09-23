@@ -1,6 +1,8 @@
 #include <iostream>
 #include <bits/stdc++.h>
+#include <mpi.h>
 using namespace std;
+using namespace chrono;
 #define V 7
 #define PATH V+1
 #define MAX 1000000
@@ -26,6 +28,7 @@ int tsp(int graph[][V], int s, int* best_path)
             cities[i+1] = vertex[i];
         }
         current_cost += graph[j][s];
+        cities[PATH-1] = s;
         if(current_cost < min_cost) {
             for(int i = 0; i < PATH; i++)
                 best_path[i] = cities[i];
@@ -38,6 +41,11 @@ int tsp(int graph[][V], int s, int* best_path)
 
 int main()
 {
+    int rank, size;
+
+    MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     int best_path[PATH];
     int graph[][V] = { {MAX, 5, 4, 2, 9, 1, 5},
                        {MAX, MAX, 0, 6, 9, 6, 0},
@@ -46,12 +54,22 @@ int main()
                        {MAX, 1, 3, 2, MAX, 6, 2},
                        { 9, 1, 8, 0, 9, MAX, 2},
                        { 1, 8, 4, 8, 6, 0, MAX}};                      
-    int s = 6;
+    int s = 0;
+    double start_time = MPI_Wtime();
+
     cout <<"Max cost: " <<tsp(graph, s, best_path) << endl;
     cout <<"Visited cities: ";
     for(int i = 0; i < PATH; i++)
         cout<< best_path[i]<<" ";
     cout<<endl;
+
+    double end_time = MPI_Wtime();
+    double res_time = end_time - start_time;
+    if(rank == 0)
+        cout << "Sequential Execution Time: " << res_time << endl;
+
+
+    MPI_Finalize();
 
     return 0;
 }

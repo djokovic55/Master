@@ -2,12 +2,14 @@
 #include <bits/stdc++.h>
 #include <mpi.h>
 #include <stdio.h>
+#include <chrono>
 using namespace std;
+// using namespace chrono;
+// using namespace std;
 
 #define V 7
 #define PATH V+1
 #define MAX 1000000
-// #define MIN(a,b) ((a<b)?a:b)
 
 int main(int argc, char *argv[])
 {
@@ -21,24 +23,24 @@ int main(int argc, char *argv[])
                        { 1, 8, 4, 8, 6, 0, MAX}};
 
     vector<int> allPerms;
-    // defaults
-    // for(int i = 0; i < 10; i++)
-    //     allPerms.push_back(i);
 
     int allPerms_size = 0;
     int perms_num = 0;
-    // int* allPerms_p;
     int starting_city = 0;
     int last_permutation_loc;
+    // auto start_time = high_resolution_clock::now();
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    double start_time = MPI_Wtime();
     
     if(rank == 0) {
         // Generate all permutations and distribute work to workers
         vector<int> vertex;
-        cout <<"PASS1, proc0"<<endl;
+        // cout <<"PASS1, proc0"<<endl;
+        // start_time = high_resolution_clock::now();
 
         //form basic city vector
         for (int i = 0; i < int(V); i++){
@@ -57,27 +59,17 @@ int main(int argc, char *argv[])
 
         // ALL PERMUTATIONS SIZE - Broadcast
         allPerms_size = allPerms.size();
-        cout <<"All perms in proc0 size "<<allPerms.size()<<"Perms number "<<perms_num<<endl;
+        // cout <<"All perms in proc0 size "<<allPerms.size()<<"Perms number "<<perms_num<<endl;
 
 
     } 
 
     MPI_Bcast(&allPerms_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     allPerms.resize(allPerms_size);
-    // cout <<"Bcast1"<<endl;
 
     MPI_Bcast(allPerms.data(), allPerms_size, MPI_INT, 0, MPI_COMM_WORLD);
-    // cout <<"Bcast2"<<endl;
 
     MPI_Bcast(&last_permutation_loc, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    // cout <<"Bcast3"<<endl;
-
-    
-    // if(rank == 1) {
-    //     for(int i = 0; i < 4320; i++){
-    //         cout<<"On process 1, allPerms el:"<<allPerms_p[i]<<endl;
-    //     }
-    // }
 
     // this is the starting pos of permutation for each process
     int i = rank*(V-1);
@@ -92,11 +84,11 @@ int main(int argc, char *argv[])
     int global_best_path[PATH];
 
 
-    if(rank == 1) {
-        cout<<"Last permutation loc: "<<last_permutation_loc<<". Proc " <<rank<<endl;
-        cout<<"All perms size"<< allPerms.size()<<". Proc "<<rank<<endl;
+    // if(rank == 1) {
+    //     cout<<"Last permutation loc: "<<last_permutation_loc<<". Proc " <<rank<<endl;
+    //     cout<<"All perms size"<< allPerms.size()<<". Proc "<<rank<<endl;
 
-    }
+    // }
 
     while(i <= last_permutation_loc){
 
@@ -107,12 +99,14 @@ int main(int argc, char *argv[])
 
         int j = starting_city;
         
+        cities[0] = starting_city;
         for (int k = 0; k < V-1; k++) {
             current_cost += graph[j][allPerms[i+k]];
             j = allPerms[i+k];
             cities[k+1] = allPerms[i+k];
         }
         //Return to origin city
+        cities[PATH-1] = starting_city;
         current_cost += graph[j][starting_city];
 
         if(current_cost < min_cost) {
@@ -128,27 +122,21 @@ int main(int argc, char *argv[])
         i += ds* int(V-1);
     }
 
-    // MPI_Barrier(MPI_COMM_WORLD);
-    if(rank != 0){
-        cout <<"Proc "<<rank<<" before if, "<<size<<endl;
 
-    }
-    
-
-    if(rank =! 0) {
-        cout <<"Proc "<<rank<<" sends, "<<size<<endl;
-        MPI_Send(&min_cost, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        MPI_Send(&best_path, PATH, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    if(rank != 0) {
+        // cout <<"Proc "<<rank<<" sends, "<<size<<endl;
+        MPI_Send(&min_cost, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+        MPI_Send(&best_path, PATH, MPI_INT, 0, 2, MPI_COMM_WORLD);
 
     } else {
-        cout <<"Proc "<<rank<<" receives"<<endl;
+        // cout <<"Proc "<<rank<<" receives"<<endl;
 
         int small_global_min_cost = MAX;
         int small_global_best_path[PATH];
 
         for(int q = 1; q < size; q++){
-            MPI_Recv(&small_global_min_cost, 1, MPI_INT, q, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Recv(&small_global_best_path, PATH, MPI_INT, q, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&small_global_min_cost, 1, MPI_INT, q, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&small_global_best_path, PATH, MPI_INT, q, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             if(small_global_min_cost < global_min_cost) {
                 for(int t = 0; t < PATH; t++)
@@ -160,13 +148,24 @@ int main(int argc, char *argv[])
         }
 
         // Print result
+        cout<<endl;
         cout <<"Max cost: " <<global_min_cost<< endl;
         cout <<"Visited cities: ";
         for(int i = 0; i < PATH; i++)
             cout<< global_best_path[i]<<" ";
         cout<<endl;
+        
+
+        // auto end_time = high_resolution_clock::now();
+        // auto duration = duration_cast<microseconds>(end_time - start_time);
+        // cout << "Parallel Execution Time: " << duration.count() << " microseconds" << endl;
 
     }
+
+    double end_time = MPI_Wtime();
+    double res_time = end_time - start_time;
+    if(rank == 0)
+        cout << "Parallel Execution Time: " << res_time << endl;
 
     MPI_Finalize();
     return 0;
