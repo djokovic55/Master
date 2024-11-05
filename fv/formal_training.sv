@@ -578,7 +578,17 @@ asm_req_payld: assume property(
 
 // When chosen transaction is being processed then trigger the checks
 logic check_active;
-assign check_active = (resp_if.payld.trans_id == req_payld_ndc.trans_id);
+assign check_active = ((resp_if.payld.trans_id == req_payld_ndc.trans_id) && resp_if.valid)
+                      || ((resp_evict_if.payld.trans_id == req_payld_ndc.trans_id) && resp_evict_if.valid);
+
+logic req_if_ndc_active;
+assign req_if_ndc_active = req_if.payld.trans_id == req_payld_ndc.trans_id;
+
+logic resp_if_ndc_active;
+assign resp_if_ndc_active = resp_if.payld.trans_id == resp_payld_ndc.trans_id;
+
+logic resp_evict_if_ndc_active;
+assign resp_evict_if_ndc_active = resp_evict_if.payld.trans_id == resp_evict_payld_ndc.trans_id;
 
 logic chosen_trans_outstanding;
 always @(posedge clk) begin
@@ -587,7 +597,12 @@ always @(posedge clk) begin
   else
     if(req_if.valid && req_if.ready && (req_if.payld.trans_id == req_payld_ndc.trans_id))
       chosen_trans_outstanding <= 1'b1;
-    else if(resp_if.valid && resp_if.ready && (resp_if.payld.trans_id == req_payld_ndc.trans_id))
+    else if(resp_if.valid && resp_if.ready 
+            && (resp_if.payld.trans_id == req_payld_ndc.trans_id)
+            && !(resp_if.payld.allocate || resp_if.payld.evict))
+      chosen_trans_outstanding <= 1'b0;
+    // If there was allocation or eviction in response then transaction is not over until valid/ready on resp_evict interface
+    else if(resp_evict_if.valid && resp_evict_if.ready && (resp_evict_if.payld.trans_id == req_payld_ndc.trans_id))
       chosen_trans_outstanding <= 1'b0;
 end
 
@@ -598,16 +613,29 @@ always @(posedge clk) begin
     allocation_event <= 1'b0;
     eviction_event <= 1'b0;
   else
-    if(resp_if.valid && resp_if.ready && (resp_if.payld.allocate))
+    if(resp_if.valid && resp_if.ready && (resp_if.payld.allocate) && (resp_if.payld.trans_id == req_payld_ndc.trans_id))
       allocation_event <= 1'b1;
     else if(resp_evict_if.valid && resp_evict_if.ready && (resp_evict_if.payld.allocation_done))
       allocation_event <= 1'b0;
 
-    if(resp_if.valid && resp_if.ready && (resp_if.payld.evict))
+    if(resp_if.valid && resp_if.ready && (resp_if.payld.evict) && (resp_if.payld.trans_id == req_payld_ndc.trans_id))
       eviction_event <= 1'b1;
     else if(resp_evict_if.valid && resp_evict_if.ready && (resp_evict_if.payld.eviction_done))
       eviction_event <= 1'b0;
 end
+
+logic req_hs, resp_hs, resp_evict_hs;
+logic hit, dirty, allocate, evict;
+logic [OPCODE_LEN-1 : 0] opcode;
+assign req_hs = (req_if.valid && req_if.ready);
+assign resp_hs = (resp_if.valid && resp_if.ready);
+assign resp_evict_hs = (resp_evict_if.valid && resp_evict_if.ready);
+
+assign hit = (resp_if.payld.hit);
+assign dirty = (resp_if.payld.dirty);
+assign allocate = (resp_if.payld.allocate);
+assign evict = (resp_if.payld.evict);
+assign opcode = (resp_if.payld.opcode);
 
 
 //------------------------------------------
@@ -666,8 +694,8 @@ Meaning, cache process needs to finish before sending a new request for that par
 - TRANSACTION ID
 
 // 3. Response always comes after request, after an undefined time
-  ast_resp_after_req1a: assert property(resp_if.valid && resp_if.ready |=> !(resp_if.valid) until_with (req_if.valid && req_if.ready));
-  ast_resp_after_req1b: assert property($rose(reset) |-> !(resp_if.valid) until_with (req_if.valid && req_if.ready));
+  ast_resp_after_req1a: assert property(resp_if_ndc_active && resp_if.valid && resp_if.ready |=> !(resp_if.valid && resp_if_ndc_active) until_with (req_if.valid && req_if.ready && req_if_ndc_active));
+  ast_resp_after_req1b: assert property($rose(reset) |-> !(resp_if.valid && resp_if_ndc_active) until_with (req_if_ndc_active && req_if.valid && req_if.ready));
 
 4. One request results in one response
 
@@ -678,7 +706,7 @@ EVICT - WRITE BACK
 
 // - DIRTY must not be set in a case of MISS
 
-ast_miss: assert property(check_active && !response.payld.hit |-> !response.payld.dirty);
+ast_miss: assert property(resp_if.valid && !resp_if.payld.hit |-> !resp_if.payld.dirty);
 
 // - MakeInvalid -> Allocation and eviction must not happen as we are just invalidating cacheline
 
@@ -686,63 +714,70 @@ ast_miss: assert property(check_active && !response.payld.hit |-> !response.payl
 // REQ - RESP problem
 // Request must be stored and once processed this should hold
 // Request are stored on valid ready handshake
-ast_make_invalid: assert property(check_active && request.payld.opcode.make_invalid |-> !(response.payld.allocate || response.payld.evict));
+ast_make_invalid: assert property(resp_if.valid && req_payld_ndc.opcode == MAKE_INVALID |-> !(allocate || evict));
 
 // - CleanInvalid -> No Allocation should take place, as this is not an allocation opcode
 
-ast_clean_invalid1: assert property(check_active && request.payld.opcode.clean_invalid |-> !(response.payld.allocate));
+ast_clean_invalid1: assert property(resp_if.valid && req_payld_ndc.opcode == CLEAN_INVALID |-> !(allocate));
 
 // - CleanInvalid -> If we HIT on a dirty cacheline, we must set EVICT
 
-ast_clean_invalid2: assert property(check_active && request.payld.opcode.clean_invalid && hit && dirty |-> (response.payld.evict));
+ast_clean_invalid2: assert property(resp_if.valid && req_payld_ndc.opcode == CLEAN_INVALID && hit && dirty |-> (evict));
 
 // - CleanInvalid -> If we HIT on a clean cacheline, we must not set EVICT
 
 // DONE
-ast_clean_invalid3: assert property(check_active && req_if.payld.opcode == CLEAN_INVALID && resp_if.payld.hit && !resp_if.payld.dirty |-> !(resp_if.payld.evict));
+ast_clean_invalid3: assert property(resp_if.valid && req_if.payld.opcode == CLEAN_INVALID && hit && !dirty |-> !(evict));
 
 // - CleanInvalid -> If we MISS on a cacheline, we must not see an eviction
 
-ast_clean_invalid4: assert property(check_active && request.payld.opcode.clean_invalid && !hit |-> !(response.payld.evict));
+ast_clean_invalid4: assert property(resp_if.valid && req_payld_ndc.opcode == CLEAN_INVALID && !hit |-> !(evict));
 
 // - CleanShared -> No Allocation should take place, as this is not an allocation opcode
 
-ast_clean_shared1: assert property(check_active && request.payld.opcode.clean_shared |-> !(response.payld.allocate));
+ast_clean_shared1: assert property(resp_if.valid && req_payld_ndc.opcode == CLEAN_SHARED |-> !(allocate));
 
 // - CleanShared -> If we HIT on a dirty cacheline, we must set EVICT
 
-ast_clean_shared2: assert property(check_active && request.payld.opcode.clean_shared && hit && dirty |-> (response.payld.evict));
+ast_clean_shared2: assert property(resp_if.valid && req_payld_ndc.opcode == CLEAN_SHARED && hit && dirty |-> (evict));
 // - CleanShared -> If we HIT on a clean cacheline, we must not set EVICT
 
-ast_clean_shared3: assert property(check_active && request.payld.opcode.clean_shared && hit && !dirty |-> !(response.payld.evict));
+ast_clean_shared3: assert property(resp_if.valid && req_payld_ndc.opcode == CLEAN_SHARED && hit && !dirty |-> !(evict));
 
 // - CleanShared -> If we MISS on a cacheline, we must not see an eviction
 
-ast_clean_shared4: assert property(check_active && request.payld.opcode.clean_shared && !hit |-> !(response.payld.evict));
+ast_clean_shared4: assert property(resp_if.valid && req_payld_ndc.opcode == CLEAN_SHARED && !hit |-> !(evict));
 
-- Write -> If we HIT on a cacheline, we must not see an eviction
+// - Write -> If we HIT on a cacheline, we must not see an eviction
+ast_write_hit1: assert property(resp_if.valid && req_payld_ndc.opcode == WRITE && hit |-> !(evict));
 
 // If it is a hit then this cache line will be updated, there is no need for memory load?
-- Write -> If we HIT on a cacheline, we must see an allocation
-- Write -> If we MISS on a cacheline, we could see an allocation or not
-- Write -> If we MISS on a cacheline, we could see an eviction or not
+// - Write -> If we HIT on a cacheline, we must see an allocation
+ast_write_hit2: assert property(resp_if.valid && req_payld_ndc.opcode == WRITE && hit |-> (allocate));
+
+// - Write -> If we MISS on a cacheline, we could see an allocation or not
+cov_miss1: cover property(resp_if.valid && !hit && (allocate));
+// - Write -> If we MISS on a cacheline, we could see an eviction or not
+cov_miss2: cover property(resp_if.valid && !hit && !(allocate));
 
 // Cache denies allocation, writing to cache, cache line protected
 // - Write -> If we MISS on a cacheline and we do not expect allocation, we must not see an eviction/write back
 
-ast_write_miss_no_allocation: assert property(write && !allocation && !hit |-> !evict);
+ast_write_miss_no_allocation: assert property(resp_if.valid && req_payld_ndc.opcode == WRITE && !allocation && !hit |-> !evict);
 
 - Write -> If we MISS on a cacheline and we expect an allocation, we could see an eviction or not
 
 - Read -> No Allocation should take place, as this is not an allocation opcode
-- Read -> No eviction should take place, as this opcode cannot produce an eviction
+// - Read -> No eviction should take place, as this opcode cannot produce an eviction
 
-ast_read_no_allocation: assert property(read |-> !allocation);
-ast_read_no_eviction: assert property(read |-> !evict);
+ast_read_no_allocation: assert property(resp_if.valid && req_payld_ndc.opcode == READ |-> !allocation);
+ast_read_no_eviction: assert property(resp_if.valid && req_payld_ndc.opcode == READ |-> !eviction;
 
 
-6. Address must match one of the outstanding requests
-7. Transaction ID must match one of the outstanding requests Transaction ID
+// 6. Address must match one of the outstanding requests
+ast_resp_address: assert property(resp_if.valid |-> req_payld_ndc.address == resp_if.payld.address);
+// 7. Transaction ID must match one of the outstanding requests Transaction ID
+ast_resp_trans_id: assert property(resp_if.valid |-> req_payld_ndc.trans_id == resp_if.payld.trans_id);
 
 //////////////////////////////////////////////////
 // RESPONSE EVICT IF Active during communication with memory
@@ -751,8 +786,8 @@ ast_read_no_eviction: assert property(read |-> !evict);
 
 1. Response evict is a valid + payld + ready interface
 
-  ast_resp_evict_valid_stability: assert property(valid && !ready |=> valid);
-  ast_resp_evict_payld_stability: assert property(valid && !ready |=> $stable(payld));
+  ast_resp_evict_valid_stability: assert property(resp_evict_if.valid && !resp_evict_if.ready |=> resp_evict_if.valid);
+  ast_resp_evict_payld_stability: assert property(resp_evict_if.valid && !resp_evict_if.ready |=> $stable(resp_evict_if.payld));
 
 2. Response evict payld has the following fields:
 - ALLOCATION_DONE
@@ -760,35 +795,43 @@ ast_read_no_eviction: assert property(read |-> !evict);
 - ADDRESS
 - TRANSACTION ID
 
-3. Response Eviction must always come after Response
+// 3. Response Eviction must always come after Response
 
-  ast_resp_evict_valid_if1a: assert property(response_evict.valid && response_evict.ready |=> !(response_evict.valid) until_with (response.valid && response.ready));
-  ast_resp_evict_valid_if1b: assert property($rose(reset) |-> !(response_evict.valid) until_with (response.valid && response.ready));
+  ast_resp_evict_valid_if1a: assert property(resp_evict_if_ndc_active && resp_evict_if.valid && resp_evict_if.ready |=> !(resp_evict_if.valid && resp_evict_if_ndc_active) until_with (resp_if_ndc_active && resp_if.valid && resp_if.ready));
+  ast_resp_evict_valid_if1b: assert property($rose(reset) |-> !(resp_evict_if.valid && resp_evict_if_ndc_active) until_with (resp_if_ndc_active && resp_if.valid && resp_if.ready));
 
-4. Response eviction must appear only if either ALLOCATION or EVICT was set at Response
+// 4. Response eviction must appear only if either ALLOCATION or EVICT was set at Response
   // store allocation or eviction event and check
-  ast_resp_evict_valid_if2a: assert property(response_evict.valid |-> allocation_event || evict_event);
-  ast_resp_evict_valid_if2b: assert property(allocation_event || evict_event |=> s_eventually (response_evict.valid));
+  ast_resp_evict_valid_if2a: assert property(resp_evict_if_ndc_active && resp_evict_if.valid |-> allocation_event || eviction_event);
+  ast_resp_evict_valid_if2b: assert property(resp_if_ndc_active && (allocation_event || eviction_event) |=> s_eventually (resp_evict_if.valid && resp_evict_if_ndc_active));
 
-5. Response eviction must not appear if neither ALLOCATION nor EVICT was set at response
-  ast_resp_evict_valid_if3: assert property(!(allocation_event || evict_event) |=> !(response_evict.valid));
+// 5. Response eviction must not appear if neither ALLOCATION nor EVICT was set at response
+  ast_resp_evict_valid_if3: assert property(!(allocation_event || eviction_event) |=> !(resp_evict_if.valid && resp_evict_if_ndc_active));
 
 // DONE
 // 6. ALLOCATION_DONE must be set just if allocation was set at Response
-  ast_allocation_done1a: assert property(!(allocation_event) |-> !(resp_evict_if.valid && resp_evict_if.payld.allocation_done));
-  ast_allocation_done1b: assert property(resp_evict_if.valid && resp_evict_if.ready && resp_evict_if.payld.allocation_done |-> allocation_event);
+  ast_allocation_done1a: assert property(!(allocation_event) |-> !(resp_evict_if.valid && resp_evict_if.payld.allocation_done && resp_evict_if_ndc_active));
+  ast_allocation_done1b: assert property(resp_evict_if_ndc_active && resp_evict_if.payld.allocation_done |-> allocation_event);
 
 
-7. EVICTION_DONE must be set just if eviction was set at Response
-  ast_allocation_done: assert property(!(allocation_event || evict_event) |-> !(resp_evict_if.payld.allocation_done));
+// 7. EVICTION_DONE must be set just if eviction was set at Response
+  ast_eviction_done1a: assert property(!(eviction_event) |-> !(resp_evict_if.valid && resp_evict_if.payld.eviction_done && resp_evict_if_ndc_active));
+  ast_eviction_done1b: assert property(resp_evict_if_ndc_active && resp_evict_if.payld.eviction_done |-> eviction_event);
 
-// 
+/*
+// In case of write where there is NO eviction (ENOUGH space in cache) the last address cache controller works with is the one from block that was WRITTEN
 8. ADDRESS must match the address from the request, if ALLOCATION_DONE is set and EVICTION_DONE is not set
-
+// In case of write where there is eviction (NOT ENOUGH space in cache) the last address cache controller works with is the one from block that was EVICTED
 9. ADDRESS must not match the address from the request, if ALLOCATION_DONE is set and EVICTION_DONE is set
-
 10. ADDRESS must match the address from the request, if ALLOCATION_DONE is not set
-11. Transaction ID must match Transaction ID from Response
+*/
+// If eviction is set - address should not match
+ast_req_resp_evict_address1: assert property(resp_evict_if_ndc_active && resp_if.valid && resp_evict_if.payld.eviction_done |-> !(req_payld_ndc.address == resp_evict_if.payld.address));
+// In other cases - address should match
+ast_req_resp_evict_address2: assert property(resp_evict_if_ndc_active && resp_if.valid && !resp_evict_if.payld.eviction_done |-> (req_payld_ndc.address == resp_evict_if.payld.address));
+
+// 11. Transaction ID must match Transaction ID from Response
+// ast_resp_evict_trans_id: assert property(resp_evict_if_ndc_active && resp_if.valid |-> (req_payld_ndc.trans_id == resp_evict_if.payld.trans_id));
 
 //--------------------------------------------------------------
 // GENERAL RULES
@@ -801,7 +844,7 @@ We must not have multiple outstanding cache processes for a given address!
 
 ast_outstanding_reqs1: assert property(chosen_trans_outstanding && req_if.valid |-> !(req_if.payld.trans_id == req_payld_ndc.trans_id));
 ast_outstanding_reqs2: assert property(chosen_trans_outstanding && req_if.valid |-> !(req_if.payld.address == req_payld_ndc.address));
-ast_outstanding_reqs3: assert property(chosen_trans_outstanding |-> s_eventually !chosen_trans_outstanding);
+ast_outstanding_reqs3: assert property(chosen_trans_outstanding |=> s_eventually !chosen_trans_outstanding);
 
 There is just ONE channel on each interface
 So we cannot see multiple Requests at the same time
@@ -813,5 +856,16 @@ Request1 -> Request2 -> Request3 -> Response3 -> Request4 -> Response4 -> Reques
 However, for the given cacheline/address we need to follow the defined sequence (Request -> Response -> (Response Evict))
 
 
+// COVERAGE
+
+Cover hs on every interface
+COver hs on every interface when req_payld_ndc is active 
+Cover all opcodes x hit or miss
+Cover allocation and eviction with properties precondition
+cover allocations and no allocations upon miss
+Cover allocation with and without eviction
+cover multiple evictions
+cover in order and out of order execution
+cover outstanding transaction completition
 
 
